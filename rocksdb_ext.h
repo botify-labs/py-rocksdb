@@ -27,8 +27,8 @@ typedef struct {
 	// object is open if all of these are non-null,
 	// once an object has been closed, it can not be re-opened
 	rocksdb::DB* _db;
-	rocksdb::LevelDBOptions* _options;
-	std::shared_ptr<rocksdb::Cache> _cache;
+	rocksdb::Options* _options;
+//	std::shared_ptr<rocksdb::Cache> _cache;
 	const rocksdb::Comparator* _comparator;
 
 	// number of open snapshots, associated with RocksDB object

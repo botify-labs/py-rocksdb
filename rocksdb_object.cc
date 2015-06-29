@@ -7,14 +7,24 @@
 
 static PyObject* PyRocksDBIter_New(PyObject* ref, PyRocksDB* db, rocksdb::Iterator* iterator, std::string* bound, int include_value, int is_reverse);
 static PyObject* PyRocksDBSnapshot_New(PyRocksDB* db, const rocksdb::Snapshot* snapshot);
+static PyObject* PyRocksDB_Close(PyRocksDB* self);
 
 static void PyRocksDB_set_error(rocksdb::Status& status)
 {
 	PyErr_SetString(rocksdb_exception, status.ToString().c_str());
 }
 
+static bool check_open(PyRocksDB* self)
+{
+    if (!self || !self->_db) {
+        PyErr_SetString(rocksdb_exception, "Database is closed");
+        return false;
+    }
+    return true;
+}
+
 const char pyrocksdb_destroy_db_doc[] =
-"rocksdb.DestroyDB(db_dir)\n\nAttempts to recover as much data as possible from a corrupt database."
+"rocksdb.DestroyDB(db_dir)\n\nDestroys the database."
 ;
 PyObject* pyrocksdb_destroy_db(PyObject* self, PyObject* args)
 {
@@ -46,7 +56,7 @@ static void PyRocksDB_dealloc(PyRocksDB* self)
 	delete self->_db;
 	delete self->_options;
 //	delete self->_cache;
-	self->_cache.reset();
+//	self->_cache.reset();
 
 	if (self->_comparator != rocksdb::BytewiseComparator())
 		delete self->_comparator;
@@ -55,7 +65,7 @@ static void PyRocksDB_dealloc(PyRocksDB* self)
 
 	self->_db = 0;
 	self->_options = 0;
-	self->_cache = 0;
+//	self->_cache = 0;
 	self->_comparator = 0;
 	self->n_iterators = 0;
 	self->n_snapshots = 0;
@@ -107,7 +117,7 @@ static PyObject* PyRocksDB_new(PyTypeObject* type, PyObject* args, PyObject* kwd
 	if (self) {
 		self->_db = 0;
 		self->_options = 0;
-		self->_cache = 0;
+//		self->_cache = 0;
 		self->_comparator = 0;
 		self->n_iterators = 0;
 		self->n_snapshots = 0;
@@ -321,6 +331,9 @@ private:
 
 static PyObject* PyRocksDB_Put(PyRocksDB* self, PyObject* args, PyObject* kwds)
 {
+	if (!check_open(self))
+    	return 0;
+
 	const char* kwargs[] = {"key", "value", "sync", 0};
 	PyObject* sync = Py_False;
 
@@ -357,6 +370,9 @@ static PyObject* PyRocksDB_Put(PyRocksDB* self, PyObject* args, PyObject* kwds)
 
 static PyObject* PyRocksDB_Get_(PyRocksDB* self, rocksdb::DB* db, const rocksdb::Snapshot* snapshot, PyObject* args, PyObject* kwds)
 {
+	if (!check_open(self))
+    	return 0;
+
 	PyObject* verify_checksums = Py_False;
 	PyObject* fill_cache = Py_True;
 	PyObject* failobj = 0;
@@ -416,6 +432,9 @@ static PyObject* PyRocksDBSnaphot_Get(PyRocksDBSnapshot* self, PyObject* args, P
 
 static PyObject* PyRocksDB_Delete(PyRocksDB* self, PyObject* args, PyObject* kwds)
 {
+	if (!check_open(self))
+    	return 0;
+
 	PyObject* sync = Py_False;
 	const char* kwargs[] = {"key", "sync", 0};
 
@@ -503,6 +522,9 @@ static PyObject* PyWriteBatch_Delete(PyWriteBatch* self, PyObject* args)
 
 static PyObject* PyRocksDB_Write(PyRocksDB* self, PyObject* args, PyObject* kwds)
 {
+	if (!check_open(self))
+    	return 0;
+
 	PyWriteBatch* write_batch = 0;
 	PyObject* sync = Py_False;
 	const char* kwargs[] = {"write_batch", "sync", 0};
@@ -542,6 +564,9 @@ static PyObject* PyRocksDB_Write(PyRocksDB* self, PyObject* args, PyObject* kwds
 
 static PyObject* PyRocksDB_RangeIter_(PyRocksDB* self, const rocksdb::Snapshot* snapshot, PyObject* args, PyObject* kwds)
 {
+	if (!check_open(self))
+    	return 0;
+
 	int is_from = 0;
 	int is_to = 0;
 	PY_LEVELDB_DEFINE_BUFFER(a);
@@ -682,6 +707,9 @@ static PyObject* PyRocksDBSnapshot_RangeIter(PyRocksDBSnapshot* self, PyObject* 
 
 static PyObject* PyRocksDB_GetStatus(PyRocksDB* self)
 {
+	if (!check_open(self))
+    	return 0;
+
 	std::string value;
 
 	if (!self->_db->GetProperty(rocksdb::Slice("rocksdb.stats"), &value)) {
@@ -698,6 +726,9 @@ static PyObject* PyRocksDB_GetStatus(PyRocksDB* self)
 
 static PyObject* PyRocksDB_CreateSnapshot(PyRocksDB* self)
 {
+	if (!check_open(self))
+    	return 0;
+
 	const rocksdb::Snapshot* snapshot = self->_db->GetSnapshot();
 	//! TBD: check for GetSnapshot() failures
 	return PyRocksDBSnapshot_New(self, snapshot);
@@ -705,6 +736,9 @@ static PyObject* PyRocksDB_CreateSnapshot(PyRocksDB* self)
 
 static PyObject* PyRocksDB_CompactRange(PyRocksDB* self, PyObject* args, PyObject* kwds)
 {
+	if (!check_open(self))
+    	return 0;
+
 	PyObject* _start = Py_None;
 	PyObject* _end = Py_None;
 
@@ -735,6 +769,7 @@ static PyObject* PyRocksDB_CompactRange(PyRocksDB* self, PyObject* args, PyObjec
 
 	Py_BEGIN_ALLOW_THREADS
 
+    rocksdb::CompactRangeOptions options;
 	rocksdb::Slice start_slice("");
 	rocksdb::Slice end_slice("");
 
@@ -744,7 +779,7 @@ static PyObject* PyRocksDB_CompactRange(PyRocksDB* self, PyObject* args, PyObjec
 	if (is_end)
 		end_slice = PY_LEVELDB_SLICE_VALUE(b);
 
-	self->_db->CompactRange(is_start ? &start_slice : 0, is_end ? &end_slice : 0);
+	self->_db->CompactRange(options, is_start ? &start_slice : nullptr, is_end ? &end_slice : nullptr);
 
 	Py_END_ALLOW_THREADS
 
@@ -758,6 +793,32 @@ static PyObject* PyRocksDB_CompactRange(PyRocksDB* self, PyObject* args, PyObjec
 	return Py_None;
 }
 
+static PyObject* PyRocksDB_Close(PyRocksDB* self)
+{
+	if (!check_open(self))
+    	return 0;
+
+	// cleanup
+	if (self->_db || self->_comparator || self->_options) {
+		Py_BEGIN_ALLOW_THREADS
+
+		delete self->_db;
+		delete self->_options;
+//		delete self->_cache;
+
+		if (self->_comparator != rocksdb::BytewiseComparator())
+			delete self->_comparator;
+
+		Py_END_ALLOW_THREADS
+
+		self->_db = 0;
+		self->_options = 0;
+//		self->_cache = 0;
+		self->_comparator = 0;
+	}
+    Py_RETURN_NONE;
+}
+
 static PyMethodDef PyRocksDB_methods[] = {
 	{(char*)"Put",            (PyCFunction)PyRocksDB_Put,       METH_VARARGS | METH_KEYWORDS, (char*)"add a key/value pair to database, with an optional synchronous disk write" },
 	{(char*)"Get",            (PyCFunction)PyRocksDB_Get,       METH_VARARGS | METH_KEYWORDS, (char*)"get a value from the database" },
@@ -767,6 +828,7 @@ static PyMethodDef PyRocksDB_methods[] = {
 	{(char*)"GetStats",       (PyCFunction)PyRocksDB_GetStatus, METH_VARARGS | METH_NOARGS,   (char*)"get a mapping of all DB statistics"},
 	{(char*)"CreateSnapshot", (PyCFunction)PyRocksDB_CreateSnapshot, METH_NOARGS, (char*)"create a new snapshot from current DB state"},
 	{(char*)"CompactRange", (PyCFunction)PyRocksDB_CompactRange, METH_VARARGS | METH_KEYWORDS, (char*)"Compact keys in the range"},
+	{(char*)"Close", (PyCFunction)PyRocksDB_Close, METH_NOARGS, (char*)"close the database"},
 	{NULL}
 };
 
@@ -834,6 +896,9 @@ const char pyrocksdb_repair_db_doc[] =
 ;
 PyObject* pyrocksdb_repair_db(PyRocksDB* self, PyObject* args, PyObject* kwds)
 {
+	if (!check_open(self))
+    	return 0;
+
 	const char* db_dir = 0;
 
 	const char* kwargs[] = {"filename", "comparator", 0};
@@ -866,19 +931,18 @@ PyObject* pyrocksdb_repair_db(PyRocksDB* self, PyObject* args, PyObject* kwds)
 		return 0;
 	}
 
-	Py_INCREF(Py_None);
-	return Py_None;
+    Py_RETURN_NONE;
 }
 
 static int PyRocksDB_init(PyRocksDB* self, PyObject* args, PyObject* kwds)
 {
 	// cleanup
-	if (self->_db || self->_cache || self->_comparator || self->_options) {
+	if (self->_db || self->_comparator || self->_options) {
 		Py_BEGIN_ALLOW_THREADS
 
 		delete self->_db;
 		delete self->_options;
-		delete self->_cache;
+//		delete self->_cache;
 
 		if (self->_comparator != rocksdb::BytewiseComparator())
 			delete self->_comparator;
@@ -887,7 +951,7 @@ static int PyRocksDB_init(PyRocksDB* self, PyObject* args, PyObject* kwds)
 
 		self->_db = 0;
 		self->_options = 0;
-		self->_cache = 0;
+//		self->_cache = 0;
 		self->_comparator = 0;
 	}
 
@@ -897,30 +961,60 @@ static int PyRocksDB_init(PyRocksDB* self, PyObject* args, PyObject* kwds)
 	PyObject* create_if_missing = Py_True;
 	PyObject* error_if_exists = Py_False;
 	PyObject* paranoid_checks = Py_False;
-	int block_cache_size = 8 * (2 << 20);
+
+	PyObject* disable_data_sync = Py_False;
+	PyObject* use_adaptive_mutex = Py_False;
+	PyObject* prepare_for_bulk_load = Py_False;
+
+//	int block_cache_size = 8 * (2 << 20);
 	int write_buffer_size = 4<<20;
-	int block_size = 4096;
+//	int block_size = 4096;
 	int max_open_files = 1000;
-	int block_restart_interval = 16;
-	const char* kwargs[] = {"filename", "create_if_missing", "error_if_exists", "paranoid_checks", "write_buffer_size", "block_size", "max_open_files", "block_restart_interval", "block_cache_size", "comparator", 0};
+//	int block_restart_interval = 16;
+	const char* kwargs[] = {
+	    "filename",
+	    "create_if_missing",
+	    "error_if_exists",
+	    "paranoid_checks",
+	    "disable_data_sync",
+	    "use_adaptive_mutex",
+	    "prepare_for_bulk_load",
+	    "write_buffer_size",
+//	    "block_size",
+	    "max_open_files",
+//	    "block_restart_interval",
+//	    "block_cache_size",
+	    "comparator",
+	    /* TODO?: add
+	    "compression_type",
+	    "compaction_style",
+	    "db_paths",
+	    "db_log_dir",
+	    "wal_dir",
+	    */
+	     0};
 
 	PyObject* comparator = 0;
 
-	if (!PyArg_ParseTupleAndKeywords(args, kwds, (char*)"s|O!O!O!iiiiiO", (char**)kwargs,
+	if (!PyArg_ParseTupleAndKeywords(args, kwds, (char*)"s|O!O!O!O!O!O!iiO", (char**)kwargs,
 		&db_dir,
 		&PyBool_Type, &create_if_missing,
 		&PyBool_Type, &error_if_exists,
 		&PyBool_Type, &paranoid_checks,
+		&PyBool_Type, &disable_data_sync,
+		&PyBool_Type, &use_adaptive_mutex,
+		&PyBool_Type, &prepare_for_bulk_load,
 		&write_buffer_size,
-		&block_size,
+//		&block_size,
 		&max_open_files,
-		&block_restart_interval,
-		&block_cache_size,
-		&comparator))
+//		&block_restart_interval,
+//		&block_cache_size,
+		&comparator
+		))
 		return -1;
 
-	if (write_buffer_size < 0 || block_size < 0 || max_open_files < 0 || block_restart_interval < 0 || block_cache_size < 0) {
-		PyErr_SetString(PyExc_ValueError, "negative write_buffer_size/block_size/max_open_files/block_restart_interval/cache_size");
+	if (write_buffer_size < 0 || max_open_files < 0) {
+		PyErr_SetString(PyExc_ValueError, "negative write_buffer_size/max_open_files");
 		return -1;
 	}
 
@@ -932,20 +1026,22 @@ static int PyRocksDB_init(PyRocksDB* self, PyObject* args, PyObject* kwds)
 
 	// open database
 	self->_options = new rocksdb::Options();
-	self->_cache = rocksdb::NewLRUCache(block_cache_size);
+	if (prepare_for_bulk_load == Py_True)
+	    self->_options->PrepareForBulkLoad();
+//	self->_cache = rocksdb::NewLRUCache(block_cache_size);
 	self->_comparator = c;
 
-	if (self->_options == 0 || self->_cache == 0 || self->_comparator == 0) {
+	if (self->_options == 0 || self->_comparator == 0) {
 		Py_BEGIN_ALLOW_THREADS
 		delete self->_options;
-		delete self->_cache;
+//		delete self->_cache;
 
 		if (self->_comparator != rocksdb::BytewiseComparator())
 			delete self->_comparator;
 		Py_END_ALLOW_THREADS
 
 		self->_options = 0;
-		self->_cache = 0;
+//		self->_cache = 0;
 		self->_comparator = 0;
 
 		PyErr_NoMemory();
@@ -956,12 +1052,14 @@ static int PyRocksDB_init(PyRocksDB* self, PyObject* args, PyObject* kwds)
 	self->_options->error_if_exists = (error_if_exists == Py_True) ? true : false;
 	self->_options->paranoid_checks = (paranoid_checks == Py_True) ? true : false;
 	self->_options->write_buffer_size = write_buffer_size;
-	self->_options->block_size = block_size;
+//	self->_options->block_size = block_size;
 	self->_options->max_open_files = max_open_files;
-	self->_options->block_restart_interval = block_restart_interval;
+//	self->_options->block_restart_interval = block_restart_interval;
 	self->_options->compression = rocksdb::kSnappyCompression;
-	self->_options->block_cache = self->_cache;
+//	self->_options->block_cache = self->_cache;
 	self->_options->comparator = self->_comparator;
+    self->_options->disableDataSync = (disable_data_sync == Py_True) ? true : false;
+    self->_options->use_adaptive_mutex = (use_adaptive_mutex == Py_True) ? true : false;
 	rocksdb::Status status;
 
 	// note: copy string parameter, since we might lose it when we release the GIL
@@ -970,13 +1068,12 @@ static int PyRocksDB_init(PyRocksDB* self, PyObject* args, PyObject* kwds)
 	int i = 0;
 
 	Py_BEGIN_ALLOW_THREADS
-    rocksdb::Options rock_options = rocksdb::ConvertOptions(*self->_options);
-	status = rocksdb::DB::Open(rock_options, _db_dir, &self->_db);
+	status = rocksdb::DB::Open(*self->_options, _db_dir, &self->_db);
 
 	if (!status.ok()) {
 		delete self->_db;
 		delete self->_options;
-		self->_cache.reset();
+//		self->_cache.reset();
 //		delete self->_cache;
 
 		//! move out of thread block
@@ -985,7 +1082,7 @@ static int PyRocksDB_init(PyRocksDB* self, PyObject* args, PyObject* kwds)
 
 		self->_db = 0;
 		self->_options = 0;
-		self->_cache = 0;
+//		self->_cache = 0;
 		self->_comparator = 0;
 
 		i = -1;
@@ -1059,7 +1156,8 @@ PyDoc_STRVAR(PyRocksDB_doc,
 "paranoid_checks   (default: False)          if True, raises an error as soon as an internal corruption is detected\n"
 "block_cache_size  (default: 8 * (2 << 20))  maximum allowed size for the block cache in bytes\n"
 "write_buffer_size (default  2 * (2 << 20))  \n"
-"block_size        (default: 4096)           unit of transfer for the block cache in bytes\n""max_open_files:   (default: 1000)\n"
+"block_size        (default: 4096)           unit of transfer for the block cache in bytes\n"
+"max_open_files:   (default: 1000)\n"
 "block_restart_interval           \n"
 "\n"
 "Snappy compression is used, if available.\n"
@@ -1096,6 +1194,10 @@ PyDoc_STRVAR(PyRocksDB_doc,
 "    include_value: if True, iterator returns key/value 2-tuples, otherwise, just keys\n"
 "\n"
 " GetStats(): get a string of runtime information\n"
+"\n"
+"Close(): close the database\n"
+"\n"
+"CompactRange(start=None, end=None): compact the database\n"
 );
 
 PyDoc_STRVAR(PyWriteBatch_doc,
