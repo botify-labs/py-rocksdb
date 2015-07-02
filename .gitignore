@@ -91,4 +91,5 @@ docs/_build/
 # PyBuilder
 target/
 
-
+# Code
+.settings/

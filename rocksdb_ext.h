@@ -1,8 +1,9 @@
-// Copyright (c) Arni Mar Jonsson.
+// Adapted from py-leveldb,
+// which is Copyright (c) Arni Mar Jonsson.
 // See LICENSE for details.
 
-#ifndef __LEVELDB__MODULE__H__
-#define __LEVELDB__MODULE__H__
+#ifndef __ROCKSDB__MODULE__H__
+#define __ROCKSDB__MODULE__H__
 
 extern "C" {
 #include <Python.h>

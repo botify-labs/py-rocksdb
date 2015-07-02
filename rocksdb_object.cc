@@ -3,6 +3,7 @@
 
 #include "rocksdb_ext.h"
 
+#include <rocksdb/options.h>
 #include <rocksdb/comparator.h>
 
 static PyObject* PyRocksDBIter_New(PyObject* ref, PyRocksDB* db, rocksdb::Iterator* iterator, std::string* bound, int include_value, int is_reverse);
@@ -965,12 +966,14 @@ static int PyRocksDB_init(PyRocksDB* self, PyObject* args, PyObject* kwds)
 	PyObject* disable_data_sync = Py_False;
 	PyObject* use_adaptive_mutex = Py_False;
 	PyObject* prepare_for_bulk_load = Py_False;
+	PyObject* read_only = Py_False;
 
 //	int block_cache_size = 8 * (2 << 20);
 	int write_buffer_size = 4<<20;
 //	int block_size = 4096;
 	int max_open_files = 1000;
 //	int block_restart_interval = 16;
+	int compression_type = rocksdb::CompressionType::kSnappyCompression;
 	const char* kwargs[] = {
 	    "filename",
 	    "create_if_missing",
@@ -979,14 +982,15 @@ static int PyRocksDB_init(PyRocksDB* self, PyObject* args, PyObject* kwds)
 	    "disable_data_sync",
 	    "use_adaptive_mutex",
 	    "prepare_for_bulk_load",
+		"read_only",
 	    "write_buffer_size",
 //	    "block_size",
 	    "max_open_files",
 //	    "block_restart_interval",
 //	    "block_cache_size",
 	    "comparator",
-	    /* TODO?: add
 	    "compression_type",
+	    /* TODO?: add
 	    "compaction_style",
 	    "db_paths",
 	    "db_log_dir",
@@ -996,7 +1000,7 @@ static int PyRocksDB_init(PyRocksDB* self, PyObject* args, PyObject* kwds)
 
 	PyObject* comparator = 0;
 
-	if (!PyArg_ParseTupleAndKeywords(args, kwds, (char*)"s|O!O!O!O!O!O!iiO", (char**)kwargs,
+	if (!PyArg_ParseTupleAndKeywords(args, kwds, (char*)"s|O!O!O!O!O!O!O!iiOi", (char**)kwargs,
 		&db_dir,
 		&PyBool_Type, &create_if_missing,
 		&PyBool_Type, &error_if_exists,
@@ -1004,17 +1008,19 @@ static int PyRocksDB_init(PyRocksDB* self, PyObject* args, PyObject* kwds)
 		&PyBool_Type, &disable_data_sync,
 		&PyBool_Type, &use_adaptive_mutex,
 		&PyBool_Type, &prepare_for_bulk_load,
+		&PyBool_Type, &read_only,
 		&write_buffer_size,
 //		&block_size,
 		&max_open_files,
 //		&block_restart_interval,
 //		&block_cache_size,
-		&comparator
+		&comparator,
+		&compression_type
 		))
 		return -1;
 
-	if (write_buffer_size < 0 || max_open_files < 0) {
-		PyErr_SetString(PyExc_ValueError, "negative write_buffer_size/max_open_files");
+	if (write_buffer_size < 0 || max_open_files < 0 || compression_type < 0) {
+		PyErr_SetString(PyExc_ValueError, "negative write_buffer_size/max_open_files/compression_type");
 		return -1;
 	}
 
@@ -1060,6 +1066,7 @@ static int PyRocksDB_init(PyRocksDB* self, PyObject* args, PyObject* kwds)
 	self->_options->comparator = self->_comparator;
     self->_options->disableDataSync = (disable_data_sync == Py_True) ? true : false;
     self->_options->use_adaptive_mutex = (use_adaptive_mutex == Py_True) ? true : false;
+	self->_options->compression = rocksdb::CompressionType(compression_type);
 	rocksdb::Status status;
 
 	// note: copy string parameter, since we might lose it when we release the GIL
@@ -1068,7 +1075,10 @@ static int PyRocksDB_init(PyRocksDB* self, PyObject* args, PyObject* kwds)
 	int i = 0;
 
 	Py_BEGIN_ALLOW_THREADS
-	status = rocksdb::DB::Open(*self->_options, _db_dir, &self->_db);
+	if (read_only == Py_False)
+		status = rocksdb::DB::Open(*self->_options, _db_dir, &self->_db);
+	else
+		status = rocksdb::DB::OpenForReadOnly(*self->_options, _db_dir, &self->_db);
 
 	if (!status.ok()) {
 		delete self->_db;
@@ -1151,16 +1161,17 @@ PyDoc_STRVAR(PyRocksDB_doc,
 "Only the parameter filename is mandatory.\n"
 "\n"
 "filename                                    the database directory\n"
+"read_only (default: False)                  if True, open the database read-only\n"
 "create_if_missing (default: True)           if True, creates a new database if none exists\n"
 "error_if_exists   (default: False)          if True, raises and error if the database already exists\n"
 "paranoid_checks   (default: False)          if True, raises an error as soon as an internal corruption is detected\n"
 //"block_cache_size  (default: 8 * (2 << 20))  maximum allowed size for the block cache in bytes\n"
 "write_buffer_size (default  2 * (2 << 20))  \n"
-"block_size        (default: 4096)           unit of transfer for the block cache in bytes\n"
-//"max_open_files:   (default: 1000)\n"
+//"block_size        (default: 4096)           unit of transfer for the block cache in bytes\n"
+"max_open_files:   (default: 1000)\n"
 "block_restart_interval           \n"
 "\n"
-"Snappy compression is used, if available.\n"
+"compression_type (default: 1)               0 none, 1 snappy, 2 gzip, 3 bzip2, 4 lz4, 5 lz4hc\n"
 "\n"
 "Some methods support the following parameters, having these semantics:\n"
 "\n"

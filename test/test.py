@@ -48,11 +48,8 @@ class TestRocksDB(unittest.TestCase):
 			'create_if_missing': True,
 			'error_if_exists': error_if_exists,
 			'paranoid_checks': False,
-			'block_cache_size': 8 * (2 << 20),
 			'write_buffer_size': 2 * (2 << 20),
-			'block_size': 4096,
 			'max_open_files': 1000,
-			'block_restart_interval': 16,
 			'comparator': self.comparator
 		}
 

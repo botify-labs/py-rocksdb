@@ -12,7 +12,7 @@ except ImportError:
 
 extra_compile_args = ['-std=c++11', '-I/usr/local/include', '-fPIC', '-Wall', '-g2',
 					  '-D_GNU_SOURCE', '-O2', '-DNDEBUG', '-fno-strict-aliasing']
-extra_link_args = ['-L/usr/local/lib', '-Bstatic', '-lrocksdb', '-Bstatic', '-lsnappy']
+extra_link_args = ['-L/usr/local/lib', '-lrocksdb', '-lsnappy', '-llz4', '-lz', '-lbz2']
 
 setup(
 	name = 'rocksdb',

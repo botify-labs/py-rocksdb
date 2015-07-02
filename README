@@ -1,20 +1,20 @@
 py-rocksdb: Python bindings for RocksDB
-Copied from py-leveldb, which author is Arni Mar Jonsson (arnimarj@gmail.com)
+Adapted from py-leveldb, which author is Arni Mar Jonsson (arnimarj@gmail.com)
 
 Build Instructions
 ------------------
 
-First of all, you need to build the included rocksdb library:
+Build rocksdb:
 
-$ ./compile_rocksdb.sh
+```
+cd rocksdb
+PORTABLE=1 make static_lib EXTRA_CXXFLAGS=-fPIC EXTRA_LDFLAGS=-fPIC
+fakeroot make install
+```
 
 Then, the extension itself:
 
-$ python setup.py build
-
-And, optionally, install it:
-
-$ sudo python setup.py install
+python setup.py build
 
 Example Usage
 -------------

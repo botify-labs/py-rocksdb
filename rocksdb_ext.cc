@@ -117,6 +117,16 @@ extern "C" void initrocksdb(void)
 		INITERROR;
 	}
 
+	// TODO
+	/*
+	if (PyModule_AddObject(rocksdb_module, (char*)"CompressionType", (PyObject*)&PyCompressionType_Type) != 0) {
+		Py_DECREF(rocksdb_module);
+		INITERROR;
+	}
+
+	Py_INCREF(rocksdb_module);
+	*/
+
 	PyEval_InitThreads();
 
 	#if PY_MAJOR_VERSION >= 3
