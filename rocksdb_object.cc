@@ -1,12 +1,16 @@
+// Derived from py-leveldb, which is
 // Copyright (c) Arni Mar Jonsson.
 // See LICENSE for details.
+
+//#include <iostream>
+//using namespace std;
 
 #include "rocksdb_ext.h"
 
 #include <rocksdb/options.h>
 #include <rocksdb/comparator.h>
 
-static PyObject* PyRocksDBIter_New(PyObject* ref, PyRocksDB* db, rocksdb::Iterator* iterator, std::string* bound, int include_value, int is_reverse);
+static PyObject* PyRocksDBIter_New(PyObject* ref, PyRocksDB* db, rocksdb::Iterator* iterator, std::string* bound, int include_value, int include_key, int is_reverse);
 static PyObject* PyRocksDBSnapshot_New(PyRocksDB* db, const rocksdb::Snapshot* snapshot);
 static PyObject* PyRocksDB_Close(PyRocksDB* self);
 
@@ -161,34 +165,34 @@ static PyObject* PyRocksDBSnapshot_new(PyTypeObject* type, PyObject* args, PyObj
 
 // Python 2.6+
 #if PY_MAJOR_VERSION >= 3 || (PY_MAJOR_VERSION >= 2 && PY_MINOR_VERSION >= 6)
-#define PY_LEVELDB_DEFINE_BUFFER(n) Py_buffer n; (n).buf = 0; (n).len = 0; (n).obj = 0
-#define PY_LEVELDB_RELEASE_BUFFER(n) if (n.obj) {PyBuffer_Release(&n);}
+#define PY_ROCKSDB_DEFINE_BUFFER(n) Py_buffer n; (n).buf = 0; (n).len = 0; (n).obj = 0
+#define PY_ROCKSDB_RELEASE_BUFFER(n) if (n.obj) {PyBuffer_Release(&n);}
 #define PARAM_V(n) &(n)
-#define PY_LEVELDB_BEGIN_ALLOW_THREADS Py_BEGIN_ALLOW_THREADS
-#define PY_LEVELDB_END_ALLOW_THREADS Py_END_ALLOW_THREADS
-#define PY_LEVELDB_SLICE_VALUE(n) rocksdb::Slice((const char*)(n).buf, (size_t)(n).len)
-#define PY_LEVELDB_STRING(n) std::string((const char*)(n).buf, (size_t)(n).len)
+#define PY_ROCKSDB_BEGIN_ALLOW_THREADS Py_BEGIN_ALLOW_THREADS
+#define PY_ROCKSDB_END_ALLOW_THREADS Py_END_ALLOW_THREADS
+#define PY_ROCKSDB_SLICE_VALUE(n) rocksdb::Slice((const char*)(n).buf, (size_t)(n).len)
+#define PY_ROCKSDB_STRING(n) std::string((const char*)(n).buf, (size_t)(n).len)
 
 #if PY_MAJOR_VERSION >= 3
 	#define PARAM_S "y*"
-	#define PY_LEVELDB_STRING_OR_BYTEARRAY PyByteArray_FromStringAndSize
+	#define PY_ROCKSDB_STRING_OR_BYTEARRAY PyByteArray_FromStringAndSize
 #else
 	#define PARAM_S "s*"
-	#define PY_LEVELDB_STRING_OR_BYTEARRAY PyString_FromStringAndSize
+	#define PY_ROCKSDB_STRING_OR_BYTEARRAY PyString_FromStringAndSize
 #endif
 
 // Python 2.4/2.5
 #else
-#define PY_LEVELDB_DEFINE_BUFFER(n) const char* s_##n = 0; int n_##n
-#define PY_LEVELDB_RELEASE_BUFFER(n)
+#define PY_ROCKSDB_DEFINE_BUFFER(n) const char* s_##n = 0; int n_##n
+#define PY_ROCKSDB_RELEASE_BUFFER(n)
 #define PARAM_V(n) &s_##n, &n_##n
-#define PY_LEVELDB_BEGIN_ALLOW_THREADS
-#define PY_LEVELDB_END_ALLOW_THREADS
-#define PY_LEVELDB_SLICE_VALUE(n) rocksdb::Slice((const char*)s_##n, (size_t)n_##n)
-#define PY_LEVELDB_STRING(n) std::string((const char*)s_##n, (size_t)n_##n);
+#define PY_ROCKSDB_BEGIN_ALLOW_THREADS
+#define PY_ROCKSDB_END_ALLOW_THREADS
+#define PY_ROCKSDB_SLICE_VALUE(n) rocksdb::Slice((const char*)s_##n, (size_t)n_##n)
+#define PY_ROCKSDB_STRING(n) std::string((const char*)s_##n, (size_t)n_##n);
 
 #define PARAM_S "t#"
-#define PY_LEVELDB_STRING_OR_BYTEARRAY PyString_FromStringAndSize
+#define PY_ROCKSDB_STRING_OR_BYTEARRAY PyString_FromStringAndSize
 #endif
 
 class PythonComparatorWrapper : public rocksdb::Comparator {
@@ -287,8 +291,8 @@ public:
 		gstate = PyGILState_Ensure();
 
 		// acquire python thread
-		PyObject* a_ = PY_LEVELDB_STRING_OR_BYTEARRAY(a.data(), a.size());
-		PyObject* b_ = PY_LEVELDB_STRING_OR_BYTEARRAY(b.data(), b.size());
+		PyObject* a_ = PY_ROCKSDB_STRING_OR_BYTEARRAY(a.data(), a.size());
+		PyObject* b_ = PY_ROCKSDB_STRING_OR_BYTEARRAY(b.data(), b.size());
 
 		if (a_ == 0 || b_ == 0) {
 			Py_XDECREF(a_);
@@ -338,8 +342,8 @@ static PyObject* PyRocksDB_Put(PyRocksDB* self, PyObject* args, PyObject* kwds)
 	const char* kwargs[] = {"key", "value", "sync", 0};
 	PyObject* sync = Py_False;
 
-	PY_LEVELDB_DEFINE_BUFFER(key);
-	PY_LEVELDB_DEFINE_BUFFER(value);
+	PY_ROCKSDB_DEFINE_BUFFER(key);
+	PY_ROCKSDB_DEFINE_BUFFER(value);
 
 	rocksdb::WriteOptions options;
 	rocksdb::Status status;
@@ -347,18 +351,20 @@ static PyObject* PyRocksDB_Put(PyRocksDB* self, PyObject* args, PyObject* kwds)
 	if (!PyArg_ParseTupleAndKeywords(args, kwds, (char*)PARAM_S PARAM_S "|O!", (char**)kwargs, PARAM_V(key), PARAM_V(value), &PyBool_Type, &sync))
 		return 0;
 
-	PY_LEVELDB_BEGIN_ALLOW_THREADS
+	PY_ROCKSDB_BEGIN_ALLOW_THREADS
 
-	rocksdb::Slice key_slice = PY_LEVELDB_SLICE_VALUE(key);
-	rocksdb::Slice value_slice = PY_LEVELDB_SLICE_VALUE(value);
+	rocksdb::Slice key_slice = PY_ROCKSDB_SLICE_VALUE(key);
+	rocksdb::Slice value_slice = PY_ROCKSDB_SLICE_VALUE(value);
 
 	options.sync = (sync == Py_True) ? true : false;
 	status = self->_db->Put(options, key_slice, value_slice);
 
-	PY_LEVELDB_END_ALLOW_THREADS
+//	cerr << "Put('" << key_slice.ToString() << "', '" << value_slice.ToString() << "')" << endl;
 
-	PY_LEVELDB_RELEASE_BUFFER(key);
-	PY_LEVELDB_RELEASE_BUFFER(value);
+	PY_ROCKSDB_END_ALLOW_THREADS
+
+	PY_ROCKSDB_RELEASE_BUFFER(key);
+	PY_ROCKSDB_RELEASE_BUFFER(value);
 
 	if (!status.ok()) {
 		PyRocksDB_set_error(status);
@@ -383,14 +389,14 @@ static PyObject* PyRocksDB_Get_(PyRocksDB* self, rocksdb::DB* db, const rocksdb:
 	rocksdb::Status status;
 	std::string value;
 
-	PY_LEVELDB_DEFINE_BUFFER(key);
+	PY_ROCKSDB_DEFINE_BUFFER(key);
 
 	if (!PyArg_ParseTupleAndKeywords(args, kwds, (char*)PARAM_S "|O!O!O", (char**)kwargs, PARAM_V(key), &PyBool_Type, &verify_checksums, &PyBool_Type, &fill_cache, &failobj))
 		return 0;
 
-	PY_LEVELDB_BEGIN_ALLOW_THREADS
+	PY_ROCKSDB_BEGIN_ALLOW_THREADS
 
-	rocksdb::Slice key_slice = PY_LEVELDB_SLICE_VALUE(key);
+	rocksdb::Slice key_slice = PY_ROCKSDB_SLICE_VALUE(key);
 
 	rocksdb::ReadOptions options;
 	options.verify_checksums = (verify_checksums == Py_True) ? true : false;
@@ -399,9 +405,9 @@ static PyObject* PyRocksDB_Get_(PyRocksDB* self, rocksdb::DB* db, const rocksdb:
 
 	status = db->Get(options, key_slice, &value);
 
-	PY_LEVELDB_END_ALLOW_THREADS
+	PY_ROCKSDB_END_ALLOW_THREADS
 
-	PY_LEVELDB_RELEASE_BUFFER(key);
+	PY_ROCKSDB_RELEASE_BUFFER(key);
 
 	if (status.IsNotFound()) {
 		if (failobj) {
@@ -418,7 +424,7 @@ static PyObject* PyRocksDB_Get_(PyRocksDB* self, rocksdb::DB* db, const rocksdb:
 		return 0;
 	}
 
-	return PY_LEVELDB_STRING_OR_BYTEARRAY(value.c_str(), value.length());
+	return PY_ROCKSDB_STRING_OR_BYTEARRAY(value.c_str(), value.length());
 }
 
 static PyObject* PyRocksDB_Get(PyRocksDB* self, PyObject* args, PyObject* kwds)
@@ -439,25 +445,25 @@ static PyObject* PyRocksDB_Delete(PyRocksDB* self, PyObject* args, PyObject* kwd
 	PyObject* sync = Py_False;
 	const char* kwargs[] = {"key", "sync", 0};
 
-	PY_LEVELDB_DEFINE_BUFFER(key);
+	PY_ROCKSDB_DEFINE_BUFFER(key);
 
 	rocksdb::Status status;
 
 	if (!PyArg_ParseTupleAndKeywords(args, kwds, (char*)PARAM_S "|O!", (char**)kwargs, PARAM_V(key), &PyBool_Type, &sync))
 		return 0;
 
-	PY_LEVELDB_BEGIN_ALLOW_THREADS
+	PY_ROCKSDB_BEGIN_ALLOW_THREADS
 
-	rocksdb::Slice key_slice = PY_LEVELDB_SLICE_VALUE(key);
+	rocksdb::Slice key_slice = PY_ROCKSDB_SLICE_VALUE(key);
 
 	rocksdb::WriteOptions options;
 	options.sync = (sync == Py_True) ? true : false;
 
 	status = self->_db->Delete(options, key_slice);
 
-	PY_LEVELDB_END_ALLOW_THREADS
+	PY_ROCKSDB_END_ALLOW_THREADS
 
-	PY_LEVELDB_RELEASE_BUFFER(key);
+	PY_ROCKSDB_RELEASE_BUFFER(key);
 
 	if (!status.ok()) {
 		PyRocksDB_set_error(status);
@@ -471,8 +477,8 @@ static PyObject* PyRocksDB_Delete(PyRocksDB* self, PyObject* args, PyObject* kwd
 static PyObject* PyWriteBatch_Put(PyWriteBatch* self, PyObject* args)
 {
 	// NOTE: we copy all buffers
-	PY_LEVELDB_DEFINE_BUFFER(key);
-	PY_LEVELDB_DEFINE_BUFFER(value);
+	PY_ROCKSDB_DEFINE_BUFFER(key);
+	PY_ROCKSDB_DEFINE_BUFFER(value);
 
 	if (!PyArg_ParseTuple(args, (char*)PARAM_S PARAM_S, PARAM_V(key), PARAM_V(value)))
 		return 0;
@@ -480,15 +486,15 @@ static PyObject* PyWriteBatch_Put(PyWriteBatch* self, PyObject* args)
 	PyWriteBatchEntry op;
 	op.is_put = true;
 
-	PY_LEVELDB_BEGIN_ALLOW_THREADS
+	PY_ROCKSDB_BEGIN_ALLOW_THREADS
 
-	op.key = PY_LEVELDB_STRING(key);
-	op.value = PY_LEVELDB_STRING(value);
+	op.key = PY_ROCKSDB_STRING(key);
+	op.value = PY_ROCKSDB_STRING(value);
 
-	PY_LEVELDB_END_ALLOW_THREADS
+	PY_ROCKSDB_END_ALLOW_THREADS
 
-	PY_LEVELDB_RELEASE_BUFFER(key);
-	PY_LEVELDB_RELEASE_BUFFER(value);
+	PY_ROCKSDB_RELEASE_BUFFER(key);
+	PY_ROCKSDB_RELEASE_BUFFER(value);
 
 	self->ops->push_back(op);
 
@@ -499,7 +505,7 @@ static PyObject* PyWriteBatch_Put(PyWriteBatch* self, PyObject* args)
 static PyObject* PyWriteBatch_Delete(PyWriteBatch* self, PyObject* args)
 {
 	// NOTE: we copy all buffers
-	PY_LEVELDB_DEFINE_BUFFER(key);
+	PY_ROCKSDB_DEFINE_BUFFER(key);
 
 	if (!PyArg_ParseTuple(args, (char*)PARAM_S, PARAM_V(key)))
 		return 0;
@@ -507,13 +513,13 @@ static PyObject* PyWriteBatch_Delete(PyWriteBatch* self, PyObject* args)
 	PyWriteBatchEntry op;
 	op.is_put = false;
 
-	PY_LEVELDB_BEGIN_ALLOW_THREADS
+	PY_ROCKSDB_BEGIN_ALLOW_THREADS
 
-	op.key = PY_LEVELDB_STRING(key);
+	op.key = PY_ROCKSDB_STRING(key);
 
-	PY_LEVELDB_END_ALLOW_THREADS
+	PY_ROCKSDB_END_ALLOW_THREADS
 
-	PY_LEVELDB_RELEASE_BUFFER(key);
+	PY_ROCKSDB_RELEASE_BUFFER(key);
 
 	self->ops->push_back(op);
 
@@ -570,17 +576,25 @@ static PyObject* PyRocksDB_RangeIter_(PyRocksDB* self, const rocksdb::Snapshot* 
 
 	int is_from = 0;
 	int is_to = 0;
-	PY_LEVELDB_DEFINE_BUFFER(a);
-	PY_LEVELDB_DEFINE_BUFFER(b);
+	PY_ROCKSDB_DEFINE_BUFFER(a);
+	PY_ROCKSDB_DEFINE_BUFFER(b);
 	PyObject* _a = Py_None;
 	PyObject* _b = Py_None;
 	PyObject* verify_checksums = Py_False;
 	PyObject* fill_cache = Py_True;
 	PyObject* include_value = Py_True;
+	PyObject* include_key = Py_True;
 	PyObject* is_reverse = Py_False;
-	const char* kwargs[] = {"key_from", "key_to", "verify_checksums", "fill_cache", "include_value", "reverse", 0};
+	const char* kwargs[] = {"key_from", "key_to", "verify_checksums", "fill_cache", "include_value", "include_key", "reverse", 0};
 
-	if (!PyArg_ParseTupleAndKeywords(args, kwds, (char*)"|OOO!O!O!O!", (char**)kwargs, &_a, &_b, &PyBool_Type, &verify_checksums, &PyBool_Type, &fill_cache, &PyBool_Type, &include_value, &PyBool_Type, &is_reverse))
+	if (!PyArg_ParseTupleAndKeywords(args, kwds, (char*)"|OOO!O!O!O!O!", (char**)kwargs,
+	 &_a,
+	  &_b,
+	 &PyBool_Type, &verify_checksums,
+	  &PyBool_Type, &fill_cache,
+	   &PyBool_Type, &include_value,
+	   &PyBool_Type, &include_key,
+	    &PyBool_Type, &is_reverse))
 		return 0;
 
 	std::string from;
@@ -606,18 +620,18 @@ static PyObject* PyRocksDB_RangeIter_(PyRocksDB* self, const rocksdb::Snapshot* 
 	}
 
 	if (is_from)
-		from = PY_LEVELDB_STRING(a);
+		from = PY_ROCKSDB_STRING(a);
 
 	if (is_to)
-		to = PY_LEVELDB_STRING(b);
+		to = PY_ROCKSDB_STRING(b);
 
 	rocksdb::Slice key(is_reverse == Py_True ? to.c_str() : from.c_str(), is_reverse == Py_True ? to.size() : from.size());
 
 	if (is_from)
-		PY_LEVELDB_RELEASE_BUFFER(a);
+		PY_ROCKSDB_RELEASE_BUFFER(a);
 
 	if (is_to)
-		PY_LEVELDB_RELEASE_BUFFER(b);
+		PY_ROCKSDB_RELEASE_BUFFER(b);
 
 	// create iterator
 	rocksdb::Iterator* iter = 0;
@@ -664,10 +678,11 @@ static PyObject* PyRocksDB_RangeIter_(PyRocksDB* self, const rocksdb::Snapshot* 
 
 	// if iterator is empty, return an empty iterator object
 	if (!iter->Valid()) {
+		fprintf(stderr, "!iter->Valid(): %s (is_reverse=%s is_from=%d is_to=%d)\n", iter->status().ToString().c_str(), is_reverse == Py_False ? "false" : "true", is_from, is_to);
 		Py_BEGIN_ALLOW_THREADS
 		delete iter;
 		Py_END_ALLOW_THREADS
-		return PyRocksDBIter_New(0, 0, 0, 0, 0, 0);
+		return PyRocksDBIter_New(0, 0, 0, 0, 0, 0, 0);
 	}
 
 	// otherwise, we're good
@@ -693,7 +708,10 @@ static PyObject* PyRocksDB_RangeIter_(PyRocksDB* self, const rocksdb::Snapshot* 
 		}
 	}
 
-	return PyRocksDBIter_New((PyObject*)self, self, iter, s, (include_value == Py_True) ? 1 : 0, (is_reverse == Py_True) ? 1 : 0);
+	return PyRocksDBIter_New((PyObject*)self, self, iter, s,
+	 (include_value == Py_True) ? 1 : 0,
+	  (include_key == Py_True) ? 1 : 0,
+	   (is_reverse == Py_True) ? 1 : 0);
 }
 
 static PyObject* PyRocksDB_RangeIter(PyRocksDB* self, PyObject* args, PyObject* kwds)
@@ -746,8 +764,8 @@ static PyObject* PyRocksDB_CompactRange(PyRocksDB* self, PyObject* args, PyObjec
 	int is_start = 0;
 	int is_end = 0;
 
-	PY_LEVELDB_DEFINE_BUFFER(a);
-	PY_LEVELDB_DEFINE_BUFFER(b);
+	PY_ROCKSDB_DEFINE_BUFFER(a);
+	PY_ROCKSDB_DEFINE_BUFFER(b);
 
 	const char* kwargs[] = {"start", "end", 0};
 
@@ -775,20 +793,20 @@ static PyObject* PyRocksDB_CompactRange(PyRocksDB* self, PyObject* args, PyObjec
 	rocksdb::Slice end_slice("");
 
 	if (is_start)
-		start_slice = PY_LEVELDB_SLICE_VALUE(a);
+		start_slice = PY_ROCKSDB_SLICE_VALUE(a);
 
 	if (is_end)
-		end_slice = PY_LEVELDB_SLICE_VALUE(b);
+		end_slice = PY_ROCKSDB_SLICE_VALUE(b);
 
 	self->_db->CompactRange(options, is_start ? &start_slice : nullptr, is_end ? &end_slice : nullptr);
 
 	Py_END_ALLOW_THREADS
 
 	if (is_start)
-		PY_LEVELDB_RELEASE_BUFFER(a);
+		PY_ROCKSDB_RELEASE_BUFFER(a);
 
 	if (is_end)
-		PY_LEVELDB_RELEASE_BUFFER(b);
+		PY_ROCKSDB_RELEASE_BUFFER(b);
 
 	Py_INCREF(Py_None);
 	return Py_None;
@@ -1161,17 +1179,21 @@ PyDoc_STRVAR(PyRocksDB_doc,
 "Only the parameter filename is mandatory.\n"
 "\n"
 "filename                                    the database directory\n"
-"read_only (default: False)                  if True, open the database read-only\n"
-"create_if_missing (default: True)           if True, creates a new database if none exists\n"
-"error_if_exists   (default: False)          if True, raises and error if the database already exists\n"
-"paranoid_checks   (default: False)          if True, raises an error as soon as an internal corruption is detected\n"
+"read_only             (default: False)          if True, open the database read-only\n"
+"create_if_missing     (default: True)           if True, creates a new database if none exists\n"
+"error_if_exists       (default: False)          if True, raises and error if the database already exists\n"
+"paranoid_checks       (default: False)          if True, raises an error as soon as an internal corruption is detected\n"
 //"block_cache_size  (default: 8 * (2 << 20))  maximum allowed size for the block cache in bytes\n"
-"write_buffer_size (default  2 * (2 << 20))  \n"
+"write_buffer_size     (default  2 * (2 << 20))  \n"
 //"block_size        (default: 4096)           unit of transfer for the block cache in bytes\n"
-"max_open_files:   (default: 1000)\n"
+"max_open_files:       (default: 1000)\n"
 "block_restart_interval           \n"
+"disable_data_sync     (default: False)\n"
+"use_adaptive_mutex    (default: False)\n"
+"comparator\n"
+"prepare_for_bulk_load (default: false)      if true, set database options optimized for bulk load\n"
 "\n"
-"compression_type (default: 1)               0 none, 1 snappy, 2 gzip, 3 bzip2, 4 lz4, 5 lz4hc\n"
+"compression_type      (default: 1)               0 none, 1 snappy, 2 gzip, 3 bzip2, 4 lz4, 5 lz4hc\n"
 "\n"
 "Some methods support the following parameters, having these semantics:\n"
 "\n"
@@ -1427,30 +1449,41 @@ static PyObject* PyRocksDBIter_next(PyRocksDBIter* iter)
 	}
 
 	// get key and (optional) value
-	PyObject* key = PY_LEVELDB_STRING_OR_BYTEARRAY(iter->iterator->key().data(), iter->iterator->key().size());
-
+	PyObject* key = 0;
 	PyObject* value = 0;
-	PyObject* ret = key;
+	PyObject* ret = 0;
 
-	if (key == 0)
-		return 0;
+	if (iter->include_key) {
+		key = PY_ROCKSDB_STRING_OR_BYTEARRAY(iter->iterator->key().data(), iter->iterator->key().size());
+		if (!iter->include_value)
+			ret = key;
+
+    	if (key == 0)
+	    	return 0;
+	}
+//	cerr << "key='" << iter->iterator->key().ToString() << "'" << endl;
+//	cerr << "data=" << iter->iterator->key().data() << " size=" << iter->iterator->key().size() << endl;
 
 	if (iter->include_value) {
-		value = PY_LEVELDB_STRING_OR_BYTEARRAY(iter->iterator->value().data(), iter->iterator->value().size());
+		value = PY_ROCKSDB_STRING_OR_BYTEARRAY(iter->iterator->value().data(), iter->iterator->value().size());
+
+//		cerr << "value='" << iter->iterator->value().ToString() << "'" << endl;
 
 		if (value == 0) {
 			Py_XDECREF(key);
 			return 0;
 		}
+		if (!iter->include_key)
+			ret = value;
 	}
 
 	// key/value pairs are returned as 2-tuples
-	if (value) {
+	if (key && value) {
 		ret = PyTuple_New(2);
 
 		if (ret == 0) {
 			Py_DECREF(key);
-			Py_XDECREF(value);
+			Py_DECREF(value);
 			return 0;
 		}
 
@@ -1464,7 +1497,7 @@ static PyObject* PyRocksDBIter_next(PyRocksDBIter* iter)
 	} else {
 		iter->iterator->Next();
 	}
-	// return k/v pair or single key
+	// return k/v pair or single key or value
 	return ret;
 }
 
@@ -1505,7 +1538,7 @@ PyTypeObject PyRocksDBIter_Type = {
 	0,
 };
 
-static PyObject* PyRocksDBIter_New(PyObject* ref, PyRocksDB* db, rocksdb::Iterator* iterator, std::string* bound, int include_value, int is_reverse)
+static PyObject* PyRocksDBIter_New(PyObject* ref, PyRocksDB* db, rocksdb::Iterator* iterator, std::string* bound, int include_value, int include_key, int is_reverse)
 {
 	PyRocksDBIter* iter = PyObject_GC_New(PyRocksDBIter, &PyRocksDBIter_Type);
 
@@ -1523,9 +1556,12 @@ static PyObject* PyRocksDBIter_New(PyObject* ref, PyRocksDB* db, rocksdb::Iterat
 	iter->is_reverse = is_reverse;
 	iter->bound = bound;
 	iter->include_value = include_value;
+	iter->include_key = include_key;
 
 	if (iter->db)
 		iter->db->n_iterators += 1;
+
+//	fprintf(stderr, "iter: include_key=%d include_value=%d is_reverse=%d\n", iter->include_key, iter->include_value, iter->is_reverse);
 
 	PyObject_GC_Track(iter);
 	return (PyObject*)iter;

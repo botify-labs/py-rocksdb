@@ -67,8 +67,9 @@ typedef struct {
 	// iterator direction
 	int is_reverse;
 
-	// if 1: return (k, v) 2-tuples, otherwise just k
+	// if both 1: return (k, v) 2-tuples, otherwise just k or v
 	int include_value;
+	int include_key;
 } PyRocksDBIter;
 
 typedef struct {
