@@ -13,6 +13,7 @@
 static PyObject* PyRocksDBIter_New(PyObject* ref, PyRocksDB* db, rocksdb::Iterator* iterator, std::string* bound, int include_value, int include_key, int is_reverse);
 static PyObject* PyRocksDBSnapshot_New(PyRocksDB* db, const rocksdb::Snapshot* snapshot);
 static PyObject* PyRocksDB_Close(PyRocksDB* self);
+static PyObject* PyRocksDBIter_Close(PyRocksDBIter* self);
 
 static void PyRocksDB_set_error(rocksdb::Status& status)
 {
@@ -58,6 +59,7 @@ PyObject* pyrocksdb_destroy_db(PyObject* self, PyObject* args)
 static void PyRocksDB_dealloc(PyRocksDB* self)
 {
 	Py_BEGIN_ALLOW_THREADS
+//    cerr << "dealloc - delete db: " << (void*)self->_db << ", options: " << (void*)self->_options << endl;
 	delete self->_db;
 	delete self->_options;
 //	delete self->_cache;
@@ -678,7 +680,7 @@ static PyObject* PyRocksDB_RangeIter_(PyRocksDB* self, const rocksdb::Snapshot* 
 
 	// if iterator is empty, return an empty iterator object
 	if (!iter->Valid()) {
-		fprintf(stderr, "!iter->Valid(): %s (is_reverse=%s is_from=%d is_to=%d)\n", iter->status().ToString().c_str(), is_reverse == Py_False ? "false" : "true", is_from, is_to);
+//		fprintf(stderr, "!iter->Valid(): %s (is_reverse=%s is_from=%d is_to=%d)\n", iter->status().ToString().c_str(), is_reverse == Py_False ? "false" : "true", is_from, is_to);
 		Py_BEGIN_ALLOW_THREADS
 		delete iter;
 		Py_END_ALLOW_THREADS
@@ -820,7 +822,7 @@ static PyObject* PyRocksDB_Close(PyRocksDB* self)
 	// cleanup
 	if (self->_db || self->_comparator || self->_options) {
 		Py_BEGIN_ALLOW_THREADS
-
+//        cerr << "close - delete db: " << (void*)self->_db << ", options: " << (void*)self->_options << endl;
 		delete self->_db;
 		delete self->_options;
 //		delete self->_cache;
@@ -861,6 +863,12 @@ static PyMethodDef PyRocksDBSnapshot_methods[] = {
 	{(char*)"Get",       (PyCFunction)PyRocksDBSnaphot_Get,        METH_VARARGS | METH_KEYWORDS, (char*)"get a value from the snapshot" },
 	{(char*)"RangeIter", (PyCFunction)PyRocksDBSnapshot_RangeIter, METH_VARARGS | METH_KEYWORDS, (char*)"key/value range scan"},
 	{NULL}
+};
+
+static PyMethodDef PyRocksDBIter_methods[] = {
+    {(char*)"Close", (PyCFunction)PyRocksDBIter_Close, METH_NOARGS, (char*)"close the iterator"},
+    {(char*)"close", (PyCFunction)PyRocksDBIter_Close, METH_NOARGS, (char*)"close the iterator"},
+    {NULL}
 };
 
 static int pyrocksdb_str_eq(PyObject* p, const char* s)
@@ -959,6 +967,7 @@ static int PyRocksDB_init(PyRocksDB* self, PyObject* args, PyObject* kwds)
 	if (self->_db || self->_comparator || self->_options) {
 		Py_BEGIN_ALLOW_THREADS
 
+//        cerr << "init - delete db: " << (void*)self->_db << ", options: " << (void*)self->_options << endl;
 		delete self->_db;
 		delete self->_options;
 //		delete self->_cache;
@@ -1394,6 +1403,9 @@ PyTypeObject PyRocksDBSnapshot_Type = {
 
 static void PyRocksDBIter_clean(PyRocksDBIter* iter)
 {
+//    cerr << "clean iter " << (void*)iter << ", c++ iter=" << (void*)iter->iterator
+//        << ", to db=" << (void*)iter->db
+//        << endl;
 	if (iter->db)
 		iter->db->n_iterators -= 1;
 
@@ -1501,6 +1513,12 @@ static PyObject* PyRocksDBIter_next(PyRocksDBIter* iter)
 	return ret;
 }
 
+static PyObject* PyRocksDBIter_Close(PyRocksDBIter* iter)
+{
+    PyRocksDBIter_clean(iter);
+    Py_RETURN_NONE;
+}
+
 PyTypeObject PyRocksDBIter_Type = {
 	#if PY_MAJOR_VERSION >= 3
 	PyVarObject_HEAD_INIT(NULL, 0)
@@ -1534,7 +1552,7 @@ PyTypeObject PyRocksDBIter_Type = {
 	0,                               /* tp_weaklistoffset */
 	PyObject_SelfIter,               /* tp_iter */
 	(iternextfunc)PyRocksDBIter_next,  /* tp_iternext */
-	0,                               /* tp_methods */
+	PyRocksDBIter_methods,           /* tp_methods */
 	0,
 };
 
