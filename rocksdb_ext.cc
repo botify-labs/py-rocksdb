@@ -112,10 +112,19 @@ extern "C" void initrocksdb(void)
 
 	Py_INCREF(&PyWriteBatch_Type);
 
-	if (PyModule_AddObject(rocksdb_module, (char*)"WriteBatch", (PyObject*)&PyWriteBatch_Type) != 0) {
+
+	if (PyModule_AddObject(rocksdb_module, (char*)"__version__", PyString_FromString(VERSION)) != 0) {
 		Py_DECREF(rocksdb_module);
 		INITERROR;
 	}
+
+	if (PyModule_AddObject(rocksdb_module, (char*)"rocksdb_version",
+		Py_BuildValue("(i, i, i)", ROCKSDB_MAJOR, ROCKSDB_MINOR, ROCKSDB_PATCH)) != 0) {
+		Py_DECREF(rocksdb_module);
+		INITERROR;
+	}
+
+	// missing: __version__, version
 
 	// TODO
 	/*

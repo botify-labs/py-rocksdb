@@ -6,23 +6,33 @@
 
 import sys
 
+VERSION = '3.13.0.1'
+
 try:
     from setuptools import setup, Extension
 except ImportError:
     from distutils.core import setup, Extension
 
-extra_compile_args = ['-std=c++11', '-I/usr/local/include', '-fPIC', '-Wall', '-g2',
-                      '-D_GNU_SOURCE', '-O2', '-DNDEBUG', '-fno-strict-aliasing']
+extra_compile_args = [
+    '-DVERSION="' + VERSION + '"',
+    '-std=c++11',
+    # '-I/usr/local/include',
+    '-fPIC',
+    '-Wall',
+    '-g2',
+    '-D_GNU_SOURCE',
+    '-O2', '-DNDEBUG', '-fno-strict-aliasing'
+]
 extra_link_args = [
-  '-L.',
-  '-lrocksdb', '-lsnappy', '-llz4', '-lz', '-lbz2'
-  ]
+    '-L.',
+    '-lrocksdb', '-lsnappy', '-llz4', '-lz', '-lbz2'
+]
 
 setup(
     name='rocksdb',
-    version='0.1.1',
-    maintainer = 'zeb',
-    maintainer_email = 'zeb@botify.com',
+    version=VERSION,
+    maintainer='zeb',
+    maintainer_email='zeb@botify.com',
     # url = 'http://code.google.com/p/py-rocksdb/',
 
     classifiers=[
@@ -45,7 +55,7 @@ setup(
         'Topic :: Software Development :: Libraries'
     ],
 
-    description='Python bindings for rocksdb database library',
+    description='Python bindings for the RocksDB database library',
 
     packages=['rocksdb'],
     package_dir={'rocksdb': ''},

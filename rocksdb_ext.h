@@ -19,7 +19,6 @@ extern "C" {
 #include <rocksdb/write_batch.h>
 #include <rocksdb/comparator.h>
 #include <rocksdb/cache.h>
-#include <rocksdb/utilities/leveldb_options.h>
 #include <vector>
 
 typedef struct {

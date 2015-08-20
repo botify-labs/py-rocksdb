@@ -1,1 +1,1 @@
-install rocksdb_ext.h
+include rocksdb_ext.h
