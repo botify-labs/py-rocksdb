@@ -9,7 +9,7 @@ Build rocksdb:
 ```
 cd rocksdb
 PORTABLE=1 make static_lib EXTRA_CXXFLAGS=-fPIC EXTRA_LDFLAGS=-fPIC
-fakeroot make install
+fakeroot make install # Or copy librocksdb.a into py-rocksdb directory
 ```
 
 Then, the extension itself:

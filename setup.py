@@ -13,12 +13,14 @@ except ImportError:
 
 extra_compile_args = ['-std=c++11', '-I/usr/local/include', '-fPIC', '-Wall', '-g2',
                       '-D_GNU_SOURCE', '-O2', '-DNDEBUG', '-fno-strict-aliasing']
-extra_link_args = [  # '-L.',
-                     '-lrocksdb', '-lsnappy', '-llz4', '-lz', '-lbz2']
+extra_link_args = [
+  '-L.',
+  '-lrocksdb', '-lsnappy', '-llz4', '-lz', '-lbz2'
+  ]
 
 setup(
     name='rocksdb',
-    version='0.1',
+    version='0.1.1',
     maintainer = 'zeb',
     maintainer_email = 'zeb@botify.com',
     # url = 'http://code.google.com/p/py-rocksdb/',
