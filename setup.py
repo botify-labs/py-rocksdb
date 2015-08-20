@@ -6,7 +6,7 @@
 
 import sys
 
-VERSION = '3.13.0.1'
+VERSION = '3.13.0.2'
 
 try:
     from setuptools import setup, Extension
@@ -33,7 +33,8 @@ setup(
     version=VERSION,
     maintainer='zeb',
     maintainer_email='zeb@botify.com',
-    # url = 'http://code.google.com/p/py-rocksdb/',
+    url = 'https://github.com/botify-labs/py-rocksdb/',
+    license='BSD',
 
     classifiers=[
         'Development Status :: 4 - Beta',

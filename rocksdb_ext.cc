@@ -112,29 +112,46 @@ extern "C" void initrocksdb(void)
 
 	Py_INCREF(&PyWriteBatch_Type);
 
+    if (PyModule_AddObject(rocksdb_module, (char*)"WriteBatch", (PyObject*)&PyWriteBatch_Type) != 0) {
+            Py_DECREF(rocksdb_module);
+            INITERROR;
+    }
 
-	if (PyModule_AddObject(rocksdb_module, (char*)"__version__", PyString_FromString(VERSION)) != 0) {
+	if (PyModule_AddObject(rocksdb_module, "__version__", PyString_FromString(VERSION)) != 0) {
 		Py_DECREF(rocksdb_module);
 		INITERROR;
 	}
 
-	if (PyModule_AddObject(rocksdb_module, (char*)"rocksdb_version",
+	if (PyModule_AddObject(rocksdb_module, "rocksdb_version",
 		Py_BuildValue("(i, i, i)", ROCKSDB_MAJOR, ROCKSDB_MINOR, ROCKSDB_PATCH)) != 0) {
 		Py_DECREF(rocksdb_module);
 		INITERROR;
 	}
 
-	// missing: __version__, version
-
-	// TODO
-	/*
-	if (PyModule_AddObject(rocksdb_module, (char*)"CompressionType", (PyObject*)&PyCompressionType_Type) != 0) {
+	if (PyModule_AddObject(rocksdb_module, "COMPRESSION_NONE", PyInt_FromLong(rocksdb::kNoCompression)) != 0) {
 		Py_DECREF(rocksdb_module);
 		INITERROR;
 	}
-
-	Py_INCREF(rocksdb_module);
-	*/
+	if (PyModule_AddObject(rocksdb_module, "COMPRESSION_SNAPPY", PyInt_FromLong(rocksdb::kSnappyCompression)) != 0) {
+		Py_DECREF(rocksdb_module);
+		INITERROR;
+	}
+	if (PyModule_AddObject(rocksdb_module, "COMPRESSION_ZLIB", PyInt_FromLong(rocksdb::kZlibCompression)) != 0) {
+		Py_DECREF(rocksdb_module);
+		INITERROR;
+	}
+	if (PyModule_AddObject(rocksdb_module, "COMPRESSION_BZIP2", PyInt_FromLong(rocksdb::kBZip2Compression)) != 0) {
+		Py_DECREF(rocksdb_module);
+		INITERROR;
+	}
+	if (PyModule_AddObject(rocksdb_module, "COMPRESSION_LZ4", PyInt_FromLong(rocksdb::kLZ4Compression)) != 0) {
+		Py_DECREF(rocksdb_module);
+		INITERROR;
+	}
+	if (PyModule_AddObject(rocksdb_module, "COMPRESSION_LZ4HC", PyInt_FromLong(rocksdb::kLZ4HCCompression)) != 0) {
+		Py_DECREF(rocksdb_module);
+		INITERROR;
+	}
 
 	PyEval_InitThreads();
 

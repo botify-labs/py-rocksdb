@@ -1,8 +1,21 @@
-py-rocksdb: Python bindings for RocksDB
+py-rocksdb: Python bindings for RocksDB 
 Adapted from py-leveldb, which author is Arni Mar Jonsson (arnimarj@gmail.com)
 
-Build Instructions
-------------------
+This is mostly py-leveldb with references to LevelDB replaced. With a notable difference:
+a `RocksDB.Close` method. May not be safe when multithreading.
+
+The constructor also have some differences:
+* removed: block_size, block_restart_interval, block_cache_size
+* added: prepare_for_bulk_load, read_only, compression_type
+* also added, less useful?: disable_data_sync, use_adaptive_mutex
+
+
+Note: an easy way to crash the library is closing a db with open iterators.
+
+
+
+
+# Build Instructions
 
 Build rocksdb:
 
@@ -16,9 +29,12 @@ Then, the extension itself:
 
 python setup.py build
 
-Example Usage
--------------
+Then `setup.py install` or `setup.py develop` to deploy in your virtualenv.
 
+# Example Usage
+
+
+```python
 >>> import rocksdb
 >>> db = rocksdb.RocksDB('./db')
 >>> db.Put('hello', 'world')
@@ -40,3 +56,4 @@ KeyError
 ...
 >>> db.Write(batch, sync = True)
 >>>
+```

@@ -9,6 +9,7 @@
 
 #include <rocksdb/options.h>
 #include <rocksdb/comparator.h>
+#include <rocksdb/statistics.h>
 
 static PyObject* PyRocksDBIter_New(PyObject* ref, PyRocksDB* db, rocksdb::Iterator* iterator, std::string* bound, int include_value, int include_key, int is_reverse);
 static PyObject* PyRocksDBSnapshot_New(PyRocksDB* db, const rocksdb::Snapshot* snapshot);
@@ -726,6 +727,43 @@ static PyObject* PyRocksDBSnapshot_RangeIter(PyRocksDBSnapshot* self, PyObject* 
 	return PyRocksDB_RangeIter_(self->db, self->snapshot, args, kwds);
 }
 
+static PyObject* PyRocksDB_GetProperty(PyRocksDB* self, PyObject* args, PyObject* kwds)
+{
+	if (!check_open(self))
+    	return 0;
+
+    PyObject *_property;
+
+    const char *kwargs[] = {"property", NULL};
+
+    if (! PyArg_ParseTupleAndKeywords(args, kwds, "|O", (char**)kwargs, 
+                                      &_property))
+        return 0;
+
+	PY_ROCKSDB_DEFINE_BUFFER(property);
+	if (!PyArg_Parse(_property, (char*)PARAM_S, PARAM_V(property)))
+		return 0;
+
+ 	std::string value;
+
+ 	bool ok = (self->_db->GetProperty(PY_ROCKSDB_SLICE_VALUE(property), &value)
+ 		// TODO || self->_db->GetProperty(rocksdb::Slice("rocksdb." + property), &value
+ 			);
+
+	PY_ROCKSDB_RELEASE_BUFFER(property);
+
+	if (!ok) {
+		PyErr_SetString(PyExc_ValueError, "unknown property");
+		return 0;
+	}
+
+	#if PY_MAJOR_VERSION >= 3
+	return PyUnicode_DecodeLatin1(value.c_str(), value.size(), 0);
+	#else
+	return PyString_FromString(value.c_str());
+	#endif
+}
+
 static PyObject* PyRocksDB_GetStatus(PyRocksDB* self)
 {
 	if (!check_open(self))
@@ -737,6 +775,23 @@ static PyObject* PyRocksDB_GetStatus(PyRocksDB* self)
 		PyErr_SetString(PyExc_ValueError, "unknown property");
 		return 0;
 	}
+
+	#if PY_MAJOR_VERSION >= 3
+	return PyUnicode_DecodeLatin1(value.c_str(), value.size(), 0);
+	#else
+	return PyString_FromString(value.c_str());
+	#endif
+}
+
+static PyObject* PyRocksDB_GetOptionStatistics(PyRocksDB* self)
+{
+	if (!check_open(self))
+    	return 0;
+
+	std::string value;
+
+	if (self->_options->statistics)
+		value = self->_options->statistics->ToString();
 
 	#if PY_MAJOR_VERSION >= 3
 	return PyUnicode_DecodeLatin1(value.c_str(), value.size(), 0);
@@ -841,15 +896,17 @@ static PyObject* PyRocksDB_Close(PyRocksDB* self)
 }
 
 static PyMethodDef PyRocksDB_methods[] = {
-	{(char*)"Put",            (PyCFunction)PyRocksDB_Put,       METH_VARARGS | METH_KEYWORDS, (char*)"add a key/value pair to database, with an optional synchronous disk write" },
-	{(char*)"Get",            (PyCFunction)PyRocksDB_Get,       METH_VARARGS | METH_KEYWORDS, (char*)"get a value from the database" },
-	{(char*)"Delete",         (PyCFunction)PyRocksDB_Delete,    METH_VARARGS | METH_KEYWORDS, (char*)"delete a value in the database" },
-	{(char*)"Write",          (PyCFunction)PyRocksDB_Write,     METH_VARARGS | METH_KEYWORDS, (char*)"apply a write-batch"},
-	{(char*)"RangeIter",      (PyCFunction)PyRocksDB_RangeIter, METH_VARARGS | METH_KEYWORDS, (char*)"key/value range scan"},
-	{(char*)"GetStats",       (PyCFunction)PyRocksDB_GetStatus, METH_VARARGS | METH_NOARGS,   (char*)"get a mapping of all DB statistics"},
-	{(char*)"CreateSnapshot", (PyCFunction)PyRocksDB_CreateSnapshot, METH_NOARGS, (char*)"create a new snapshot from current DB state"},
-	{(char*)"CompactRange", (PyCFunction)PyRocksDB_CompactRange, METH_VARARGS | METH_KEYWORDS, (char*)"Compact keys in the range"},
-	{(char*)"Close", (PyCFunction)PyRocksDB_Close, METH_NOARGS, (char*)"close the database"},
+	{(char*)"Put",            (PyCFunction)PyRocksDB_Put,         METH_VARARGS | METH_KEYWORDS, (char*)"add a key/value pair to database, with an optional synchronous disk write" },
+	{(char*)"Get",            (PyCFunction)PyRocksDB_Get,         METH_VARARGS | METH_KEYWORDS, (char*)"get a value from the database" },
+	{(char*)"Delete",         (PyCFunction)PyRocksDB_Delete,      METH_VARARGS | METH_KEYWORDS, (char*)"delete a value in the database" },
+	{(char*)"Write",          (PyCFunction)PyRocksDB_Write,       METH_VARARGS | METH_KEYWORDS, (char*)"apply a write-batch"},
+	{(char*)"RangeIter",      (PyCFunction)PyRocksDB_RangeIter,   METH_VARARGS | METH_KEYWORDS, (char*)"key/value range scan"},
+	{(char*)"GetProperty",    (PyCFunction)PyRocksDB_GetProperty, METH_VARARGS | METH_KEYWORDS, (char*)"get a DB property"},
+	{(char*)"GetStats",       (PyCFunction)PyRocksDB_GetStatus,   METH_VARARGS | METH_NOARGS,   (char*)"get a mapping of all DB statistics"},
+	{(char*)"GetOptionStatistics", (PyCFunction)PyRocksDB_GetOptionStatistics, METH_NOARGS, (char*)"get optional statistics"},
+	{(char*)"CreateSnapshot", (PyCFunction)PyRocksDB_CreateSnapshot, METH_NOARGS,               (char*)"create a new snapshot from current DB state"},
+	{(char*)"CompactRange", (PyCFunction)PyRocksDB_CompactRange,  METH_VARARGS | METH_KEYWORDS, (char*)"Compact keys in the range"},
+	{(char*)"Close", (PyCFunction)PyRocksDB_Close,                METH_NOARGS,                  (char*)"close the database"},
 	{NULL}
 };
 
@@ -994,6 +1051,7 @@ static int PyRocksDB_init(PyRocksDB* self, PyObject* args, PyObject* kwds)
 	PyObject* use_adaptive_mutex = Py_False;
 	PyObject* prepare_for_bulk_load = Py_False;
 	PyObject* read_only = Py_False;
+	PyObject* statistics = Py_False;
 
 //	int block_cache_size = 8 * (2 << 20);
 	int write_buffer_size = 4<<20;
@@ -1010,6 +1068,7 @@ static int PyRocksDB_init(PyRocksDB* self, PyObject* args, PyObject* kwds)
 	    "use_adaptive_mutex",
 	    "prepare_for_bulk_load",
 		"read_only",
+	    "statistics",
 	    "write_buffer_size",
 //	    "block_size",
 	    "max_open_files",
@@ -1027,7 +1086,7 @@ static int PyRocksDB_init(PyRocksDB* self, PyObject* args, PyObject* kwds)
 
 	PyObject* comparator = 0;
 
-	if (!PyArg_ParseTupleAndKeywords(args, kwds, (char*)"s|O!O!O!O!O!O!O!iiOi", (char**)kwargs,
+	if (!PyArg_ParseTupleAndKeywords(args, kwds, (char*)"s|O!O!O!O!O!O!O!O!iiOi", (char**)kwargs,
 		&db_dir,
 		&PyBool_Type, &create_if_missing,
 		&PyBool_Type, &error_if_exists,
@@ -1036,6 +1095,7 @@ static int PyRocksDB_init(PyRocksDB* self, PyObject* args, PyObject* kwds)
 		&PyBool_Type, &use_adaptive_mutex,
 		&PyBool_Type, &prepare_for_bulk_load,
 		&PyBool_Type, &read_only,
+		&PyBool_Type, &statistics,
 		&write_buffer_size,
 //		&block_size,
 		&max_open_files,
@@ -1094,6 +1154,8 @@ static int PyRocksDB_init(PyRocksDB* self, PyObject* args, PyObject* kwds)
     self->_options->disableDataSync = (disable_data_sync == Py_True) ? true : false;
     self->_options->use_adaptive_mutex = (use_adaptive_mutex == Py_True) ? true : false;
 	self->_options->compression = rocksdb::CompressionType(compression_type);
+	if (statistics == Py_True)
+		self->_options->statistics = rocksdb::CreateDBStatistics();
 	rocksdb::Status status;
 
 	// note: copy string parameter, since we might lose it when we release the GIL
@@ -1188,21 +1250,22 @@ PyDoc_STRVAR(PyRocksDB_doc,
 "Only the parameter filename is mandatory.\n"
 "\n"
 "filename                                    the database directory\n"
-"read_only             (default: False)          if True, open the database read-only\n"
-"create_if_missing     (default: True)           if True, creates a new database if none exists\n"
-"error_if_exists       (default: False)          if True, raises and error if the database already exists\n"
-"paranoid_checks       (default: False)          if True, raises an error as soon as an internal corruption is detected\n"
+"read_only             (default: False)      if True, open the database read-only\n"
+"create_if_missing     (default: True)       if True, creates a new database if none exists\n"
+"error_if_exists       (default: False)      if True, raises and error if the database already exists\n"
+"paranoid_checks       (default: False)      if True, raises an error as soon as an internal corruption is detected\n"
 //"block_cache_size  (default: 8 * (2 << 20))  maximum allowed size for the block cache in bytes\n"
-"write_buffer_size     (default  2 * (2 << 20))  \n"
+"write_buffer_size     (default: 2 * (2 << 20))  \n"
 //"block_size        (default: 4096)           unit of transfer for the block cache in bytes\n"
 "max_open_files:       (default: 1000)\n"
 "block_restart_interval           \n"
 "disable_data_sync     (default: False)\n"
 "use_adaptive_mutex    (default: False)\n"
 "comparator\n"
-"prepare_for_bulk_load (default: false)      if true, set database options optimized for bulk load\n"
+"prepare_for_bulk_load (default: False)      if True, set database options optimized for bulk load\n"
 "\n"
-"compression_type      (default: 1)               0 none, 1 snappy, 2 gzip, 3 bzip2, 4 lz4, 5 lz4hc\n"
+"compression_type      (default: Snappy)     see rocksdb.COMPRESSION_*\n"
+"statistics            (default: False)      if True, detailled statistics are available via GetOptionStatistics\n"
 "\n"
 "Some methods support the following parameters, having these semantics:\n"
 "\n"
@@ -1221,7 +1284,7 @@ PyDoc_STRVAR(PyRocksDB_doc,
 "    key: the key\n"
 "    value: the value\n"
 "\n"
-" Delete(key, sync = False): delete key/value pair, raises no error kf key not found\n"
+" Delete(key, sync = False): delete key/value pair, raises no error if key not found\n"
 "\n"
 "    key: the key\n"
 "\n"
@@ -1233,13 +1296,17 @@ PyDoc_STRVAR(PyRocksDB_doc,
 "\n"
 "    key_from: if not None: defines lower bound (inclusive) for iterator\n"
 "    key_to:   if not None: defined upper bound (inclusive) for iterator\n"
-"    include_value: if True, iterator returns key/value 2-tuples, otherwise, just keys\n"
+"    include_value: if True, iterator returns key/value 2-tuples; otherwise, just keys\n"
 "\n"
 " GetStats(): get a string of runtime information\n"
 "\n"
-"Close(): close the database\n"
+" GetProperty(property): get a string of runtime information corresponding to the property\n"
 "\n"
-"CompactRange(start=None, end=None): compact the database\n"
+" GetOptionStatistics(): get a string of optional statistics (if the DB was opened with statistics=True)\n"
+"\n"
+" CompactRange(start=None, end=None): compact the database\n"
+"\n"
+" Close(): close the database\n"
 );
 
 PyDoc_STRVAR(PyWriteBatch_doc,
